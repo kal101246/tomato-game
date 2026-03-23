@@ -1,0 +1,11 @@
+{
+	"className": "Tool",
+	"properties": {
+		"ToolTip": {
+			"String": "Throw a tomato!"
+		},
+		"RequiresHandle": {
+			"Bool": false
+		}
+	}
+}
