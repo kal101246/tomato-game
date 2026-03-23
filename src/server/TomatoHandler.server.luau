@@ -234,6 +234,10 @@ throwTomato.OnServerEvent:Connect(function(player: Player, targetPosition: Vecto
 	local character = player.Character
 	if not character then return end
 
+	-- Stun check: WalkSpeed is set to 0 by the chalk stun; block throwing while stunned
+	local pHumanoid = character:FindFirstChildOfClass("Humanoid") :: Humanoid?
+	if pHumanoid and pHumanoid.WalkSpeed < 1 then return end
+
 	local root = character:FindFirstChild("HumanoidRootPart") :: BasePart
 	if not root then return end
 

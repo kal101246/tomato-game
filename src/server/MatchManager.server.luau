@@ -60,9 +60,17 @@ roundResult.Name   = "RoundResult"
 roundResult.Value  = ""
 roundResult.Parent = ReplicatedStorage
 
--- ── Wait for EnvironmentBuilder to expose the cleanup callable ─────────────────
+-- ── Wait for EnvironmentBuilder callables ─────────────────────────────────────
 local cleanupFn: BindableFunction =
 	ServerStorage:WaitForChild("CleanupClassroom") :: BindableFunction
+
+local popQuizFn: BindableFunction =
+	ServerStorage:WaitForChild("StartPopQuiz") :: BindableFunction
+
+-- Pop Quiz config
+local POP_QUIZ_CHECK_INTERVAL: number = 10   -- seconds between each 30% roll
+local POP_QUIZ_CHANCE: number         = 0.30
+local POP_QUIZ_DURATION: number       = 10   -- seconds the desk barrage lasts
 
 -- ── Helpers ───────────────────────────────────────────────────────────────────
 local function getTopScore(): number
@@ -173,8 +181,37 @@ while true do
 	giveTomatoToAll()
 	spawnTeachers(config)
 
+	-- ── Pop Quiz checker (runs in parallel with the countdown) ────────────────
+	-- Every POP_QUIZ_CHECK_INTERVAL seconds there is a POP_QUIZ_CHANCE chance of
+	-- triggering a 10-second flying-desk barrage.  roundActive gates the loop so
+	-- it exits cleanly when the countdown ends regardless of timing.
+	local roundActive = true
+	local roundStatusMsg = string.format(
+		"ROUND %d — GET %d POINTS!",
+		currentRound,
+		config.pointsNeeded
+	)
+
+	task.spawn(function()
+		while roundActive do
+			task.wait(POP_QUIZ_CHECK_INTERVAL)
+			if not roundActive then break end
+
+			if math.random() < POP_QUIZ_CHANCE then
+				statusMessage.Value = "POP QUIZ! DODGE THE DESKS!"
+				-- Invoke blocks this coroutine for POP_QUIZ_DURATION seconds while
+				-- EnvironmentBuilder runs the desk-spawning loop — that's intentional.
+				popQuizFn:Invoke(POP_QUIZ_DURATION)
+				if roundActive then
+					statusMessage.Value = roundStatusMsg
+				end
+			end
+		end
+	end)
+
 	-- Run the round timer
 	runCountdown(config.duration)
+	roundActive = false   -- signals the pop quiz checker to stop
 
 	-- ── Evaluate result ───────────────────────────────────────────────────────
 	local topScore = getTopScore()

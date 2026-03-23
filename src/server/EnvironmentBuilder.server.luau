@@ -1,5 +1,8 @@
-local workspace      = game:GetService("Workspace")
+local Players        = game:GetService("Players")
+local TweenService   = game:GetService("TweenService")
+local Debris         = game:GetService("Debris")
 local ServerStorage  = game:GetService("ServerStorage")
+local workspace      = game:GetService("Workspace")
 
 -- ── Container ─────────────────────────────────────────────────────────────────
 local environment = Instance.new("Folder")
@@ -137,3 +140,82 @@ billLabel.Parent          = billboard
 -- #region agent log
 print("[EnvironmentBuilder] AmmoCrate spawned at: " .. tostring(crate.Position))
 -- #endregion
+
+-- ── StartPopQuiz ──────────────────────────────────────────────────────────────
+-- MatchManager invokes this when a Pop Quiz event triggers.
+-- Spawns "Flying Desks" that slide across the classroom for `duration` seconds.
+-- Desks are Anchored (clean TweenService slide) but CanCollide=true so players
+-- can jump on top to avoid them.  Touched callbacks manually fling any player
+-- that gets hit because anchored parts don't exert physics forces.
+local popQuizFn        = Instance.new("BindableFunction")
+popQuizFn.Name         = "StartPopQuiz"
+popQuizFn.Parent       = ServerStorage
+
+-- Room X-bounds the desks slide between (well outside the whiteboard/desk area)
+local DESK_SLIDE_START_X: number = -22
+local DESK_SLIDE_END_X: number   =  22
+-- Z range desks can spawn at (classroom depth, avoiding walls)
+local DESK_SPAWN_Z_MIN: number   = -24
+local DESK_SPAWN_Z_MAX: number   =   0
+local DESK_FLOOR_Y: number       =  0.5   -- half of 1-stud height
+local DESK_SLIDE_TIME: number    =  2.5   -- seconds to cross the room
+local DESK_SPAWN_INTERVAL: number = 1.5   -- seconds between desk spawns
+local FLING_SPEED: number        = 35
+
+popQuizFn.OnInvoke = function(duration: number): ()
+	local endTime = tick() + duration
+
+	while tick() < endTime do
+		local fromLeft  = math.random() < 0.5
+		local startX    = fromLeft and DESK_SLIDE_START_X or DESK_SLIDE_END_X
+		local endX      = fromLeft and DESK_SLIDE_END_X   or DESK_SLIDE_START_X
+		local spawnZ    = DESK_SPAWN_Z_MIN + math.random() * (DESK_SPAWN_Z_MAX - DESK_SPAWN_Z_MIN)
+		local slideDir  = fromLeft and Vector3.new(1, 0, 0) or Vector3.new(-1, 0, 0)
+
+		local flyDesk               = Instance.new("Part")
+		flyDesk.Name                = "FlyingDesk"
+		flyDesk.Size                = Vector3.new(4, 1, 2.5)
+		flyDesk.Color               = Color3.fromRGB(106, 74, 40)
+		flyDesk.Material            = Enum.Material.Wood
+		flyDesk.Anchored            = true   -- must be true for TweenService to work cleanly
+		flyDesk.CanCollide          = true   -- players can jump on top to dodge
+		flyDesk.TopSurface          = Enum.SurfaceType.Smooth
+		flyDesk.BottomSurface       = Enum.SurfaceType.Smooth
+		flyDesk.CastShadow          = false
+		flyDesk.Position            = Vector3.new(startX, DESK_FLOOR_Y, spawnZ)
+		flyDesk.Parent              = workspace
+
+		-- Fling any player that gets touched (debounced per player)
+		local hitPlayers: { [Player]: boolean } = {}
+		flyDesk.Touched:Connect(function(hit: BasePart)
+			local hitChar = hit:FindFirstAncestorOfClass("Model")
+			if not hitChar then return end
+			local hitPlayer = Players:GetPlayerFromCharacter(hitChar)
+			if not hitPlayer or hitPlayers[hitPlayer] then return end
+			hitPlayers[hitPlayer] = true
+
+			local root = hitChar:FindFirstChild("HumanoidRootPart") :: BasePart?
+			if root then
+				-- Fling in the desk's travel direction with a slight upward kick
+				root.AssemblyLinearVelocity =
+					(slideDir + Vector3.new(0, 0.45, 0)).Unit * FLING_SPEED
+			end
+
+			-- Reset debounce so a player can be hit again if they stay in the path
+			task.delay(1, function()
+				hitPlayers[hitPlayer] = nil
+			end)
+		end)
+
+		-- Tween the desk linearly across the room
+		TweenService:Create(flyDesk,
+			TweenInfo.new(DESK_SLIDE_TIME, Enum.EasingStyle.Linear),
+			{ Position = Vector3.new(endX, DESK_FLOOR_Y, spawnZ) }
+		):Play()
+
+		-- Destroy slightly after tween finishes so it clears the far wall area
+		Debris:AddItem(flyDesk, DESK_SLIDE_TIME + 0.5)
+
+		task.wait(DESK_SPAWN_INTERVAL)
+	end
+end

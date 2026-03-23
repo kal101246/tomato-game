@@ -112,6 +112,12 @@ end
 
 local function updateStatus(value: string): ()
 	statusLabel.Text = value
+	-- "POP QUIZ" status should stand out in red; everything else is white
+	if string.find(value, "POP QUIZ") then
+		statusLabel.TextColor3 = Color3.fromRGB(220, 50, 32)
+	else
+		statusLabel.TextColor3 = Color3.fromRGB(240, 240, 240)
+	end
 end
 
 -- Prevents overlapping splash tweens if results fire rapidly
