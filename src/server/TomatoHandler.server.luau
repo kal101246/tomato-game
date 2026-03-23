@@ -2,6 +2,7 @@ local Players           = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Debris            = game:GetService("Debris")
 local TweenService      = game:GetService("TweenService")
+local CollectionService = game:GetService("CollectionService")
 
 -- ── Remotes setup ────────────────────────────────────────────────────────────
 local remotes = Instance.new("Folder")
@@ -136,17 +137,41 @@ end
 
 -- ── Hit detection ────────────────────────────────────────────────────────────
 local function onTomatoTouched(tomato: BasePart, hit: BasePart): ()
+	-- H-C: tomato already destroyed by a prior touch or lifetime expiry
 	if not tomato.Parent then return end
+
+	-- H-B: ownership already claimed (duplicate touch) or expired
 	local data = tomatoOwners[tomato]
 	if not data then return end
 
-	local teacher = workspace:FindFirstChild("Teacher")
-	if not teacher then return end
-
 	local hitModel = hit:FindFirstAncestorOfClass("Model")
-	if hitModel ~= teacher then return end
 
-	-- Claim before any async work to block duplicate touch callbacks
+	-- Suppress log spam for hits against the Baseplate, floor, or any part with no Model
+	if not hitModel then return end
+
+	-- #region agent log
+	print("[TomatoHandler] Touched — hit part: " .. hit.Name .. " | model: " .. hitModel.Name)
+	-- #endregion
+
+	-- H-C (self-hit guard): ignore the throwing player's own character
+	if hitModel == data.player.Character then
+		-- #region agent log
+		print("[TomatoHandler] Self-hit ignored for: " .. data.player.Name)
+		-- #endregion
+		return
+	end
+
+	-- H-A fix: accept any model tagged TeacherNPC, or named Teacher / Teacher_N
+	local isTeacher = CollectionService:HasTag(hitModel, "TeacherNPC")
+		or hitModel.Name == "Teacher"
+		or string.sub(hitModel.Name, 1, 7) == "Teacher"
+
+	if not isTeacher then return end
+
+	-- Disable collision immediately so the tomato can't bounce before Destroy() runs
+	tomato.CanCollide = false
+
+	-- Claim ownership before any async work to prevent duplicate scoring
 	tomatoOwners[tomato] = nil
 
 	local owner: Player        = data.player
@@ -178,16 +203,17 @@ local function onTomatoTouched(tomato: BasePart, hit: BasePart): ()
 
 	local isLongShot = distance > DIST_MID
 
-	print(string.format(
-		"[TomatoHandler] %s hit the Teacher! Distance: %.1f studs → +%d point%s%s",
-		owner.Name,
-		distance,
-		points,
-		points == 1 and "" or "s",
-		isLongShot and " (LONG SHOT!)" or ""
-	))
-
+	-- H-E: verify leaderstats path is intact
 	local leaderstats = owner:FindFirstChild("leaderstats")
+	-- #region agent log
+	print(string.format(
+		"[TomatoHandler] HIT CONFIRMED — player: %s | dist: %.1f | pts: %d | leaderstats: %s | Score: %s",
+		owner.Name, distance, points,
+		tostring(leaderstats ~= nil),
+		tostring(leaderstats ~= nil and leaderstats:FindFirstChild("Score") ~= nil)
+	))
+	-- #endregion
+
 	if leaderstats then
 		local score = leaderstats:FindFirstChild("Score") :: IntValue
 		if score then

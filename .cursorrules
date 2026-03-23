@@ -4,3 +4,4 @@ Always adhere to the following rules:
 - Do NOT tell me to create scripts via the Roblox Studio interface; give me the code and the exact file path.
 - Use modern Luau syntax: strong type checking (`: number`, `: string`), `task.wait()` instead of `wait()`, and `workspace` instead of `game.Workspace`.
 - Keep code modular. Separate UI, network logic (RemoteEvents), and core gameplay logic.
+
